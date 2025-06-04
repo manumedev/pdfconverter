@@ -1,0 +1,8 @@
+Nested Document in Subfolder
+
+This document is located in a subfolder to test:
+- Directory structure preservation
+- Recursive file processing
+- Nested folder creation in output
+
+This should end up in: pdf/subfolder/nested_document.pdf 
