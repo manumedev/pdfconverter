@@ -42,8 +42,8 @@ except ImportError as e:
     subprocess.run(['pip3', 'install', '-r', 'requirements.txt'])
 "
 
-# Run the PDF Converter
-echo "🚀 Launching PDF Converter GUI..."
-python3 pdf_converter.py
+# Run the PDF Converter using the improved launcher
+echo "🚀 Launching PDF Converter GUI with macOS optimizations..."
+python3 launch_gui.py
 
 echo "👋 PDF Converter closed." 
