@@ -44,6 +44,19 @@ except ImportError as e:
 
 # Run the PDF Converter using the improved launcher
 echo "🚀 Launching PDF Converter GUI with macOS optimizations..."
-python3 launch_gui.py
+
+# Try GUI first, fallback to CLI if GUI fails due to macOS version
+if python3 pdf_converter.py 2>/dev/null; then
+    echo "GUI launched successfully"
+else
+    echo "⚠️  GUI not available (macOS version issue). Using CLI instead."
+    echo "📋 CLI Usage Examples:"
+    echo "   python3 pdf_converter_cli.py /path/to/documents"
+    echo "   python3 pdf_converter_cli.py /path/to/documents --flat --verbose"
+    echo "   python3 pdf_converter_cli.py --help"
+    echo ""
+    echo "💡 To convert files, run:"
+    echo "   python3 pdf_converter_cli.py /path/to/your/files"
+fi
 
 echo "👋 PDF Converter closed." 

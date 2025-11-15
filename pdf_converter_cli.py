@@ -260,7 +260,150 @@ def generate_unique_filename(output_dir, base_name, extension=".pdf"):
     return output_path
 
 
-def convert_directory(directory, maintain_structure=True, output_dir=None, verbose=False):
+def combine_files_to_single_pdf(files, output_path, directory_path):
+    """Combine all files into a single PDF with file titles"""
+    try:
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
+        from reportlab.lib.units import inch
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+        from PIL import Image
+        import io
+        
+        # Create PDF document
+        doc = SimpleDocTemplate(str(output_path), pagesize=A4)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # Title style
+        title_style = styles['Heading1']
+        title_style.fontSize = 16
+        title_style.spaceAfter = 12
+        
+        # Subtitle style for file names
+        subtitle_style = styles['Heading2']
+        subtitle_style.fontSize = 14
+        subtitle_style.spaceAfter = 8
+        
+        # Normal style
+        normal_style = styles['Normal']
+        normal_style.fontSize = 10
+        normal_style.spaceAfter = 6
+        
+        print(f"📄 Creating combined PDF: {output_path.name}")
+        
+        for i, file_path in enumerate(files, 1):
+            try:
+                relative_path = file_path.relative_to(directory_path)
+                file_type = PDFConverter().get_file_type(file_path)
+                
+                print(f"[{i:3d}/{len(files)}] Adding: {relative_path}")
+                
+                # Add file title
+                story.append(Paragraph(f"📄 {relative_path}", title_style))
+                story.append(Spacer(1, 6))
+                
+                if file_type == 'images':
+                    # For images, add a note and try to include the image
+                    story.append(Paragraph(f"<i>Image file: {file_path.name}</i>", normal_style))
+                    story.append(Paragraph(f"<i>Size: {file_path.stat().st_size} bytes</i>", normal_style))
+                    
+                    # Try to add the actual image
+                    try:
+                        with Image.open(file_path) as img:
+                            # Convert to RGB if necessary
+                            if img.mode != 'RGB':
+                                img = img.convert('RGB')
+                            
+                            # Resize image to fit page width
+                            max_width = A4[0] - 2*inch
+                            max_height = A4[1] - 2*inch
+                            
+                            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+                            
+                            # Save to bytes
+                            img_bytes = io.BytesIO()
+                            img.save(img_bytes, format='JPEG', quality=85)
+                            img_bytes.seek(0)
+                            
+                            # Add image to PDF
+                            from reportlab.platypus import Image as RLImage
+                            story.append(RLImage(img_bytes, width=img.width, height=img.height))
+                            story.append(Spacer(1, 12))
+                    except Exception as e:
+                        story.append(Paragraph(f"<i>Could not embed image: {str(e)}</i>", normal_style))
+                
+                elif file_type == 'documents':
+                    # For text documents, add the content
+                    try:
+                        if file_path.suffix.lower() == '.txt':
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                        elif file_path.suffix.lower() == '.md':
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                content = f.read()
+                        elif file_path.suffix.lower() == '.docx':
+                            from docx import Document
+                            doc_doc = Document(file_path)
+                            content = '\n'.join([paragraph.text for paragraph in doc_doc.paragraphs])
+                        else:
+                            content = f"Document file: {file_path.name}"
+                        
+                        # Split content into paragraphs and add to PDF
+                        lines = content.split('\n')
+                        for line in lines:
+                            if line.strip():
+                                # Escape HTML special characters
+                                escaped_line = line.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                                story.append(Paragraph(escaped_line, normal_style))
+                            else:
+                                story.append(Spacer(1, 6))
+                                
+                    except Exception as e:
+                        story.append(Paragraph(f"<i>Could not read document: {str(e)}</i>", normal_style))
+                
+                elif file_type == 'spreadsheets':
+                    # For spreadsheets, add basic info
+                    story.append(Paragraph(f"<i>Spreadsheet file: {file_path.name}</i>", normal_style))
+                    story.append(Paragraph(f"<i>Size: {file_path.stat().st_size} bytes</i>", normal_style))
+                    story.append(Paragraph(f"<i>Note: Spreadsheet content not fully displayed in combined PDF</i>", normal_style))
+                
+                elif file_type == 'presentations':
+                    # For presentations, add basic info
+                    story.append(Paragraph(f"<i>Presentation file: {file_path.name}</i>", normal_style))
+                    story.append(Paragraph(f"<i>Size: {file_path.stat().st_size} bytes</i>", normal_style))
+                    story.append(Paragraph(f"<i>Note: Presentation content not fully displayed in combined PDF</i>", normal_style))
+                
+                elif file_type == 'pdf':
+                    # For existing PDFs, add basic info
+                    story.append(Paragraph(f"<i>Existing PDF file: {file_path.name}</i>", normal_style))
+                    story.append(Paragraph(f"<i>Size: {file_path.stat().st_size} bytes</i>", normal_style))
+                    story.append(Paragraph(f"<i>Note: PDF content not embedded in combined PDF</i>", normal_style))
+                
+                # Add separator between files
+                story.append(Spacer(1, 12))
+                story.append(Paragraph("─" * 50, normal_style))
+                story.append(Spacer(1, 12))
+                
+                # Add page break every 5 files to avoid too long pages
+                if i % 5 == 0 and i < len(files):
+                    story.append(PageBreak())
+                
+            except Exception as e:
+                story.append(Paragraph(f"<i>Error processing {file_path.name}: {str(e)}</i>", normal_style))
+                story.append(Spacer(1, 12))
+        
+        # Build the PDF
+        doc.build(story)
+        return True
+        
+    except Exception as e:
+        print(f"Error creating combined PDF: {e}")
+        return False
+
+
+def convert_directory(directory, maintain_structure=True, output_dir=None, verbose=False, combine=False):
     """Convert all files in directory and subdirectories"""
     converter = PDFConverter()
     
@@ -284,6 +427,9 @@ def convert_directory(directory, maintain_structure=True, output_dir=None, verbo
     pdf_output_dir.mkdir(exist_ok=True)
     
     structure_mode = "directory structure" if maintain_structure else "flat list"
+    if combine:
+        structure_mode = "combined single PDF"
+    
     print(f"🔄 PDF Converter - Command Line")
     print(f"📁 Source directory: {directory_path}")
     print(f"💾 Output directory: {pdf_output_dir}")
@@ -316,6 +462,23 @@ def convert_directory(directory, maintain_structure=True, output_dir=None, verbo
     else:
         print(f"   Use --verbose to see file list")
     print()
+    
+    # Handle combine mode
+    if combine:
+        output_filename = f"{directory_path.name}_combined.pdf"
+        combined_output_path = pdf_output_dir / output_filename
+        
+        print(f"📄 Combining all files into single PDF...")
+        print(f"📄 Output file: {combined_output_path}")
+        print()
+        
+        if combine_files_to_single_pdf(all_files, combined_output_path, directory_path):
+            print("✅ Combined PDF created successfully!")
+            print(f"📁 Combined PDF saved to: {combined_output_path}")
+            return True
+        else:
+            print("❌ Failed to create combined PDF")
+            return False
     
     successful_conversions = 0
     failed_conversions = 0
@@ -387,6 +550,7 @@ Examples:
   %(prog)s /path/to/documents --flat
   %(prog)s /path/to/documents --output /path/to/pdfs
   %(prog)s /path/to/documents --flat --verbose
+  %(prog)s /path/to/documents --combine
   %(prog)s . --output ../converted_pdfs
 
 Supported file formats:
@@ -421,6 +585,12 @@ Supported file formats:
     )
     
     parser.add_argument(
+        "--combine", "-c",
+        action="store_true",
+        help="Combine all files into a single PDF with file titles"
+    )
+    
+    parser.add_argument(
         "--version",
         action="version",
         version="PDF Converter CLI 1.0"
@@ -433,7 +603,8 @@ Supported file formats:
             directory=args.directory,
             maintain_structure=not args.flat,
             output_dir=args.output,
-            verbose=args.verbose
+            verbose=args.verbose,
+            combine=args.combine
         )
         
         sys.exit(0 if success else 1)

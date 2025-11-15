@@ -36,6 +36,7 @@ class ProminentPDFConverterGUI:
         self.selected_directory = ""
         self.conversion_progress = tk.StringVar(value="Ready to convert files")
         self.maintain_structure = tk.BooleanVar(value=True)
+        self.combine_files = tk.BooleanVar(value=False)
         
         # Create GUI
         self.create_gui()
@@ -117,6 +118,20 @@ class ProminentPDFConverterGUI:
         tk.Radiobutton(options_frame, text="Flat list (all PDFs in one folder)", 
                       variable=self.maintain_structure, value=False,
                       font=("Arial", 11)).pack(anchor="w", pady=2)
+        
+        # Combine option
+        combine_frame = tk.Frame(options_frame)
+        combine_frame.pack(fill=tk.X, pady=(10,0))
+        
+        tk.Checkbutton(combine_frame, text="📄 Combine all files into single PDF", 
+                      variable=self.combine_files,
+                      font=("Arial", 11, "bold"), fg="blue",
+                      command=self.on_combine_toggle).pack(anchor="w")
+        
+        self.combine_info = tk.Label(combine_frame, 
+                                   text="(Each file will have its own section with title)", 
+                                   font=("Arial", 9), fg="gray")
+        self.combine_info.pack(anchor="w", padx=(20,0))
         
         # Progress
         progress_frame = tk.Frame(main_frame)
@@ -372,6 +387,31 @@ class ProminentPDFConverterGUI:
         except Exception as e:
             print(f"❌ Error logging message: {e}")
     
+    def on_combine_toggle(self):
+        """Handle combine option toggle"""
+        if self.combine_files.get():
+            # Disable structure options when combining
+            for widget in self.root.winfo_children():
+                self._disable_radiobuttons(widget)
+        else:
+            # Re-enable structure options
+            for widget in self.root.winfo_children():
+                self._enable_radiobuttons(widget)
+    
+    def _disable_radiobuttons(self, widget):
+        """Recursively disable radiobuttons"""
+        if isinstance(widget, tk.Radiobutton):
+            widget.config(state='disabled')
+        for child in widget.winfo_children():
+            self._disable_radiobuttons(child)
+    
+    def _enable_radiobuttons(self, widget):
+        """Recursively enable radiobuttons"""
+        if isinstance(widget, tk.Radiobutton):
+            widget.config(state='normal')
+        for child in widget.winfo_children():
+            self._enable_radiobuttons(child)
+    
     def start_conversion(self):
         """Start conversion"""
         directory = self.selected_directory.strip() if self.selected_directory else ""
@@ -417,6 +457,31 @@ class ProminentPDFConverterGUI:
             
             if not all_files:
                 self.log_message("No files to convert")
+                self.convert_button.config(state='normal', text="🔄 CONVERT TO PDF", bg="green")
+                return
+            
+            # Handle combine mode
+            if self.combine_files.get():
+                self.log_message(f"Combining {len(all_files)} files into single PDF...")
+                
+                output_filename = f"{directory_path.name}_combined.pdf"
+                combined_output_path = pdf_output_dir / output_filename
+                
+                # Import the combine function
+                from pdf_converter_cli import combine_files_to_single_pdf
+                
+                if combine_files_to_single_pdf(all_files, combined_output_path, directory_path):
+                    self.log_message("✅ Combined PDF created successfully!")
+                    self.log_message(f"📁 Combined PDF saved to: {combined_output_path}")
+                    self.conversion_progress.set("Complete: Combined PDF created")
+                    messagebox.showinfo("Conversion Complete", 
+                                      f"Combined PDF created successfully!\n\n"
+                                      f"📄 Combined {len(all_files)} files into single PDF\n"
+                                      f"📁 Saved to: {combined_output_path}")
+                else:
+                    self.log_message("❌ Failed to create combined PDF")
+                    messagebox.showerror("Conversion Error", "Failed to create combined PDF")
+                
                 self.convert_button.config(state='normal', text="🔄 CONVERT TO PDF", bg="green")
                 return
             
